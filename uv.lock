@@ -4,8 +4,8 @@ requires-python = ">=3.11"
 
 [manifest]
 members = [
-    "tes",
     "tes-core",
+    "tesera",
 ]
 
 [[package]]
@@ -197,7 +197,18 @@ wheels = [
 ]
 
 [[package]]
-name = "tes"
+name = "tes-core"
+version = "0.1.0"
+source = { editable = "packages/core" }
+dependencies = [
+    { name = "python-magic" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "python-magic" }]
+
+[[package]]
+name = "tesera"
 version = "0.1.0"
 source = { editable = "." }
 
@@ -215,17 +226,6 @@ requires-dist = [
     { name = "tes-core", marker = "extra == 'dev'", editable = "packages/core" },
 ]
 provides-extras = ["dev"]
-
-[[package]]
-name = "tes-core"
-version = "0.1.0"
-source = { editable = "packages/core" }
-dependencies = [
-    { name = "python-magic" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "python-magic" }]
 
 [[package]]
 name = "tomli"

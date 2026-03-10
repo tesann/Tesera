@@ -35,7 +35,7 @@ ENV/
 .DS_Store
 Thumbs.db
 
-# .TES runtime (local commits, keys)
+# Tesera runtime (local commits, keys)
 .tes/
 
 # SQLite (when used under .tes/)

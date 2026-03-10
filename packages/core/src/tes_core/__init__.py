@@ -1,4 +1,4 @@
-# .TES core: hashing, signing, commits, store, chain
+# Tesera core: hashing, signing, commits, store, chain
 
 from tes_core.hash import detect_media_type, hash_buffer, hash_file
 

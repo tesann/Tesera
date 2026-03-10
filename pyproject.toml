@@ -1,7 +1,7 @@
 [project]
-name = "tes"
+name = "tesera"
 version = "0.1.0"
-description = ".TES — cryptographic provenance for digital media"
+description = "Tesera — cryptographic provenance for digital media"
 requires-python = ">=3.11"
 dependencies = []
 
