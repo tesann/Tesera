@@ -24,6 +24,22 @@ def generate_key_pair() -> tuple[str, str]:
     return (public_key_pem, private_key_pem)
 
 
+def get_public_key_pem(private_key_pem: str) -> str:
+    """Extract the PEM-encoded public key from a PEM-encoded private key.
+
+    Returns the same format as the public key from generate_key_pair.
+    """
+    private_key = serialization.load_pem_private_key(
+        private_key_pem.encode("ascii"), password=None
+    )
+    if not isinstance(private_key, Ed25519PrivateKey):
+        raise ValueError("Key is not an Ed25519 private key")
+    return private_key.public_key().public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    ).decode("ascii")
+
+
 def sign(data: bytes, private_key_pem: str) -> str:
     """Sign the provided bytes with the Ed25519 private key.
 
