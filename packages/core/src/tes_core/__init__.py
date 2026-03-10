@@ -11,6 +11,13 @@ from tes_core.commit import (
 from tes_core.hash import detect_media_type, hash_buffer, hash_file
 from tes_core.sign import fingerprint, generate_key_pair, get_public_key_pem, sign, verify
 from tes_core.store import CommitStore, InMemoryCommitStore, SqliteCommitStore
+from tes_core.chain import (
+    ChainVerificationResult,
+    KeyResolver,
+    find_common_ancestor,
+    get_provenance,
+    verify_chain,
+)
 
 __all__ = [
     "TesCommit",
@@ -30,4 +37,9 @@ __all__ = [
     "CommitStore",
     "InMemoryCommitStore",
     "SqliteCommitStore",
+    "ChainVerificationResult",
+    "KeyResolver",
+    "verify_chain",
+    "get_provenance",
+    "find_common_ancestor",
 ]
