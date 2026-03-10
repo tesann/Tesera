@@ -2,8 +2,6 @@
 
 import hashlib
 
-import magic
-
 CHUNK_SIZE = 65536  # 64 KB
 
 
@@ -32,9 +30,11 @@ def detect_media_type(path: str) -> str:
     """Detect MIME type from file content (magic bytes), not file extension.
 
     Returns the detected MIME type (e.g. image/jpeg), or application/octet-stream
-    if detection fails (missing file, I/O error, or unknown type).
+    if detection fails (missing file, I/O error, unknown type, or libmagic unavailable).
     """
     try:
+        import magic
+
         mime = magic.from_file(path, mime=True)
         return (mime or "application/octet-stream").strip()
     except Exception:
