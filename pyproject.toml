@@ -27,4 +27,5 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["tes"]
+# No root package; all SDK code lives in packages/core.
+only-include = ["pyproject.toml"]

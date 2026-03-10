@@ -2,7 +2,7 @@
 
 Verify where any image or video came from. Prove who made it and what changed.
 
-.TES is an open infrastructure that records the origin and evolution of digital media using cryptographic records (like Git for images and video). This repository is **Python-first**; TypeScript integration is planned for later.
+Tesera is an open infrastructure that records the origin and evolution of digital media using cryptographic records (like Git for images and video). This repository is **Python-first**; TypeScript integration is planned for later.
 
 ## Setup
 
