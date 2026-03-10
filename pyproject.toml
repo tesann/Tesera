@@ -1,0 +1,27 @@
+[project]
+name = "tes"
+version = "0.1.0"
+description = ".TES — cryptographic provenance for digital media"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=4.0",
+    "tes-core",
+]
+
+[tool.uv.sources]
+tes-core = { workspace = true }
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["packages", "tests"]
+pythonpath = ["."]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
