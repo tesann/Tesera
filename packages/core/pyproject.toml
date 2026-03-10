@@ -3,7 +3,7 @@ name = "tes-core"
 version = "0.1.0"
 description = ".TES core SDK — hashing, signing, commits, store, chain"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = ["python-magic"]
 
 [build-system]
 requires = ["hatchling"]
