@@ -40,3 +40,12 @@ Thumbs.db
 
 # SQLite (when used under .tes/)
 *.db
+
+# Test / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Ruff
+.ruff_cache/
