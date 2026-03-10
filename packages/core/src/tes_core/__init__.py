@@ -10,6 +10,7 @@ from tes_core.commit import (
 )
 from tes_core.hash import detect_media_type, hash_buffer, hash_file
 from tes_core.sign import fingerprint, generate_key_pair, get_public_key_pem, sign, verify
+from tes_core.store import CommitStore, InMemoryCommitStore, SqliteCommitStore
 
 __all__ = [
     "TesCommit",
@@ -26,4 +27,7 @@ __all__ = [
     "hash_file",
     "sign",
     "verify",
+    "CommitStore",
+    "InMemoryCommitStore",
+    "SqliteCommitStore",
 ]
