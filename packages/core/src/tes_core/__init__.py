@@ -1,5 +1,6 @@
 # Tesera core: hashing, signing, commits, store, chain
 
+from tes_core.api import Tesera
 from tes_core.commit import (
     TesCommit,
     canonicalize,
@@ -20,6 +21,7 @@ from tes_core.chain import (
 )
 
 __all__ = [
+    "Tesera",
     "TesCommit",
     "create_commit",
     "verify_commit",
