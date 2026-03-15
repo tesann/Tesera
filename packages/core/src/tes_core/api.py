@@ -28,18 +28,52 @@ class Tesera:
         path: str = ".tesera",
         key_name: str = "default",
         media_type: str | None = None,
+        private_key: str | None = None,
     ) -> None:
         """Initialize Tesera at the given path with the named signing key.
 
         path: Directory for data (SQLite DB and keys). Created if missing. Default .tesera.
         key_name: Name of the key pair (files keys/{key_name}.pem and .pub.pem). Default default.
         media_type: Optional default MIME type for commits (overridable per commit).
+        private_key: Optional PEM-encoded Ed25519 private key. If provided, used directly;
+            not saved to disk; .tesera directory is not created until first store use.
         """
         self._path = os.path.abspath(path)
         self._default_media_type = media_type
+        self._key_resolver_cache = None
+        self._key_resolver_fn = None
+
+        # 1. Explicit private_key parameter
+        if private_key is not None:
+            try:
+                self._public_key_pem = get_public_key_pem(private_key.strip())
+            except (ValueError, Exception) as e:
+                raise ValueError(
+                    "Invalid private key: expected PEM-encoded Ed25519 private key"
+                ) from e
+            self._private_key_pem = private_key.strip()
+            self._store = None
+            return
+
+        # 2. Environment variable TESERA_PRIVATE_KEY
+        if "TESERA_PRIVATE_KEY" in os.environ:
+            raw = os.environ["TESERA_PRIVATE_KEY"]
+            if raw.strip():
+                pem = raw.strip().replace("\\n", "\n")
+                try:
+                    self._public_key_pem = get_public_key_pem(pem)
+                except (ValueError, Exception) as e:
+                    raise ValueError(
+                        "Invalid private key in TESERA_PRIVATE_KEY: "
+                        "expected PEM-encoded Ed25519 private key"
+                    ) from e
+                self._private_key_pem = pem
+                self._store = None
+                return
+
+        # 3 & 4. Filesystem or auto-generate
         keys_dir = os.path.join(self._path, "keys")
         os.makedirs(keys_dir, exist_ok=True)
-
         db_path = os.path.join(self._path, "tesera.db")
         self._store = SqliteCommitStore(db_path)
 
@@ -69,11 +103,17 @@ class Tesera:
                 "Both or neither must exist."
             )
 
-        self._key_resolver_cache: dict[str, str] | None = None
-        self._key_resolver_fn: Callable[[str], str | None] | None = None
+    def _ensure_store(self) -> None:
+        """Create the SQLite store and path if using an explicit or env key (lazy init)."""
+        if self._store is None:
+            os.makedirs(self._path, exist_ok=True)
+            db_path = os.path.join(self._path, "tesera.db")
+            self._store = SqliteCommitStore(db_path)
 
     def _key_resolver(self, key_id: str) -> str | None:
         """Resolve key fingerprint to public PEM. Caches key dir scan on first use."""
+        if key_id == fingerprint(self._public_key_pem):
+            return self._public_key_pem
         if self._key_resolver_fn is not None:
             return self._key_resolver_fn(key_id)
         keys_dir = os.path.join(self._path, "keys")
@@ -104,6 +144,7 @@ class Tesera:
         media_type: str | None = None,
     ) -> TesCommit:
         """Create a provenance commit for the media (file path or raw bytes) and save it to the store."""
+        self._ensure_store()
         parent_ids = parents if parents is not None else []
         resolved_media_type = (
             media_type if media_type is not None else self._default_media_type
@@ -121,6 +162,7 @@ class Tesera:
 
     def verify(self, media: str | bytes) -> list[ChainVerificationResult]:
         """Verify provenance for the media (file path or raw bytes); returns verification results per matching commit."""
+        self._ensure_store()
         media_hash = (
             hash_buffer(media) if isinstance(media, bytes) else hash_file(media)
         )
@@ -128,6 +170,7 @@ class Tesera:
 
     def history(self, media: str | bytes) -> list[TesCommit]:
         """Return all commits for this media (by hash) plus ancestors, sorted by timestamp ascending."""
+        self._ensure_store()
         media_hash = (
             hash_buffer(media) if isinstance(media, bytes) else hash_file(media)
         )
@@ -149,6 +192,7 @@ class Tesera:
 
     def get(self, commit_id: str) -> TesCommit | None:
         """Retrieve a single commit by ID, or None if not found."""
+        self._ensure_store()
         return self._store.get_by_commit_id(commit_id)
 
     def export(self, commit_id: str) -> str:
@@ -160,13 +204,25 @@ class Tesera:
 
     def import_commit(self, json_str: str) -> TesCommit:
         """Deserialize a commit from JSON and save it to the store."""
+        self._ensure_store()
         commit = deserialize_commit(json_str)
         self._store.save(commit)
         return commit
 
+    @property
+    def public_key(self) -> str:
+        """Returns the PEM-encoded public key."""
+        return self._public_key_pem
+
+    @property
+    def key_fingerprint(self) -> str:
+        """Returns the 32-character hex fingerprint of the active signing key."""
+        return fingerprint(self._public_key_pem)
+
     def close(self) -> None:
         """Close the SQLite store."""
-        self._store.close()
+        if self._store is not None:
+            self._store.close()
 
     def __enter__(self) -> "Tesera":
         return self

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from tes_core import Tesera, hash_file
+from tes_core import Tesera, fingerprint, generate_key_pair, hash_file
 
 # Repo root: packages/core/tests -> packages/core -> packages -> root
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
@@ -245,4 +245,132 @@ def test_history_bytes(tmp_path: Path) -> None:
     fixture_bytes = FIXTURE_PATH.read_bytes()
     hist = t.history(fixture_bytes)
     assert len(hist) >= 1
+    t.close()
+
+
+# --- Key loading: explicit, env, filesystem, auto-generate ---
+
+HEX_32_RE = re.compile(r"^[0-9a-f]{32}$")
+
+
+def test_key_explicit_parameter(tmp_path: Path) -> None:
+    """Pass private key directly to Tesera(); commit and verify; fingerprint matches."""
+    public_pem, private_pem = generate_key_pair()
+    path = tmp_path / "t"
+    t = Tesera(path=str(path), private_key=private_pem)
+    t.commit(str(FIXTURE_PATH), operation="create")
+    results = t.verify(str(FIXTURE_PATH))
+    assert len(results) == 1
+    assert results[0].complete is True
+    assert t.key_fingerprint == fingerprint(public_pem)
+    t.close()
+
+
+def test_key_env_var(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """TESERA_PRIVATE_KEY set; Tesera() uses it; fingerprint matches."""
+    public_pem, private_pem = generate_key_pair()
+    monkeypatch.setenv("TESERA_PRIVATE_KEY", private_pem)
+    path = tmp_path / "t"
+    t = Tesera(path=str(path))
+    t.commit(str(FIXTURE_PATH), operation="create")
+    assert t.key_fingerprint == fingerprint(public_pem)
+    t.close()
+
+
+def test_key_env_var_with_escaped_newlines(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """TESERA_PRIVATE_KEY with literal \\n; SDK replaces with real newlines."""
+    public_pem, private_pem = generate_key_pair()
+    escaped = private_pem.replace("\n", "\\n")
+    monkeypatch.setenv("TESERA_PRIVATE_KEY", escaped)
+    path = tmp_path / "t"
+    t = Tesera(path=str(path))
+    assert t.key_fingerprint == fingerprint(public_pem)
+    t.close()
+
+
+def test_key_priority_explicit_over_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Explicit private_key wins over TESERA_PRIVATE_KEY."""
+    pub_a, priv_a = generate_key_pair()
+    pub_b, priv_b = generate_key_pair()
+    monkeypatch.setenv("TESERA_PRIVATE_KEY", priv_a)
+    path = tmp_path / "t"
+    t = Tesera(path=str(path), private_key=priv_b)
+    assert t.key_fingerprint == fingerprint(pub_b)
+    assert t.key_fingerprint != fingerprint(pub_a)
+    t.close()
+
+
+def test_key_priority_env_over_filesystem(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """TESERA_PRIVATE_KEY wins over key on filesystem."""
+    pub_a, priv_a = generate_key_pair()
+    pub_b, priv_b = generate_key_pair()
+    path = tmp_path / "t"
+    path.mkdir()
+    keys_dir = path / "keys"
+    keys_dir.mkdir()
+    (keys_dir / "default.pem").write_text(priv_a, encoding="utf-8")
+    (keys_dir / "default.pub.pem").write_text(pub_a, encoding="utf-8")
+    monkeypatch.setenv("TESERA_PRIVATE_KEY", priv_b)
+    t = Tesera(path=str(path))
+    assert t.key_fingerprint == fingerprint(pub_b)
+    assert t.key_fingerprint != fingerprint(pub_a)
+    t.close()
+
+
+def test_key_auto_generate(tmp_path: Path) -> None:
+    """Fresh dir, no env: Tesera() creates key file and valid accessors."""
+    path = tmp_path / "t"
+    t = Tesera(path=str(path))
+    assert (path / "keys" / "default.pem").exists()
+    assert t.public_key.startswith("-----BEGIN PUBLIC KEY-----")
+    assert len(t.key_fingerprint) == 32
+    assert HEX_32_RE.match(t.key_fingerprint)
+    t.close()
+
+
+def test_key_fingerprint_accessor(tmp_path: Path) -> None:
+    """key_fingerprint is 32 lowercase hex characters."""
+    path = tmp_path / "t"
+    t = Tesera(path=str(path))
+    assert len(t.key_fingerprint) == 32
+    assert HEX_32_RE.match(t.key_fingerprint)
+    t.close()
+
+
+def test_public_key_accessor(tmp_path: Path) -> None:
+    """public_key returns PEM starting with BEGIN PUBLIC KEY."""
+    path = tmp_path / "t"
+    t = Tesera(path=str(path))
+    assert t.public_key.startswith("-----BEGIN PUBLIC KEY-----")
+    t.close()
+
+
+def test_invalid_explicit_key(tmp_path: Path) -> None:
+    """Invalid private_key raises ValueError."""
+    path = tmp_path / "t"
+    with pytest.raises(ValueError, match="Invalid private key"):
+        Tesera(path=str(path), private_key="not a real key")
+
+
+def test_invalid_env_var_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Invalid TESERA_PRIVATE_KEY raises ValueError mentioning env var."""
+    monkeypatch.setenv("TESERA_PRIVATE_KEY", "garbage")
+    path = tmp_path / "t"
+    with pytest.raises(ValueError, match="TESERA_PRIVATE_KEY"):
+        Tesera(path=str(path))
+
+
+def test_explicit_key_no_filesystem(tmp_path: Path) -> None:
+    """Explicit key only: no .tesera/keys or store created until first use."""
+    _, private_pem = generate_key_pair()
+    path = tmp_path / "proj"
+    t = Tesera(path=str(path), private_key=private_pem)
+    assert not (path / "keys").exists()
+    assert not (path / "tesera.db").exists()
     t.close()
