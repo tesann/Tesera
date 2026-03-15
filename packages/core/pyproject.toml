@@ -3,7 +3,10 @@ name = "tes-core"
 version = "0.1.0"
 description = "Core SDK for Tesera — cryptographic media provenance"
 requires-python = ">=3.10"
-dependencies = ["cryptography", "python-magic"]
+dependencies = ["cryptography", "python-magic", "typer>=0.12"]
+
+[project.scripts]
+tesera = "tes_core.cli:app"
 
 [build-system]
 requires = ["hatchling"]

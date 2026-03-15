@@ -37,6 +37,7 @@ Thumbs.db
 
 # Tesera runtime (local commits, keys)
 .tes/
+.tesera/
 
 # SQLite (when used under .tes/)
 *.db
