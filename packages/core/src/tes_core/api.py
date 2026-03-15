@@ -139,13 +139,21 @@ class Tesera:
         self,
         media: str | bytes,
         operation: str = "create",
+        parent: str | None = None,
         parents: list[str] | None = None,
         metadata: dict | None = None,
         media_type: str | None = None,
     ) -> TesCommit:
         """Create a provenance commit for the media (file path or raw bytes) and save it to the store."""
         self._ensure_store()
-        parent_ids = parents if parents is not None else []
+        if parent is not None and parents is not None:
+            raise ValueError("Cannot specify both 'parent' and 'parents'")
+        if parent is not None:
+            parent_ids = [parent]
+        elif parents is not None:
+            parent_ids = parents
+        else:
+            parent_ids = []
         resolved_media_type = (
             media_type if media_type is not None else self._default_media_type
         )
@@ -159,6 +167,83 @@ class Tesera:
         )
         self._store.save(commit)
         return commit
+
+    def lookup(self, media: str | bytes) -> TesCommit | None:
+        """
+        Look up the most recent commit for a media file.
+        Returns the commit if found, None if the media has no provenance.
+        Does NOT verify signatures — just checks if a commit exists.
+        """
+        self._ensure_store()
+        media_hash = (
+            hash_buffer(media) if isinstance(media, bytes) else hash_file(media)
+        )
+        commits = self._store.get_by_media_hash(media_hash)
+        if not commits:
+            return None
+        commits_sorted = sorted(commits, key=lambda c: c.timestamp)
+        return commits_sorted[-1]
+
+    def commit_edit(
+        self,
+        original: str | bytes,
+        edited: str | bytes,
+        metadata: dict | None = None,
+        media_type: str | None = None,
+    ) -> TesCommit:
+        """
+        Commit an edit. Automatically finds the parent commit for the original
+        file and links the edited version to it.
+
+        If the original has an existing Tesera commit, creates an edit commit
+        with that commit as parent.
+
+        If the original has no existing commit (unverified upload), creates
+        an import commit for the original first, then an edit commit on top.
+
+        Returns the edit commit (the commit for the edited file).
+        """
+        found = self.lookup(original)
+        if found is not None:
+            return self.commit(
+                edited,
+                operation="edit",
+                parent=found.id,
+                metadata=metadata,
+                media_type=media_type,
+            )
+        import_commit = self.commit(original, operation="import")
+        return self.commit(
+            edited,
+            operation="edit",
+            parent=import_commit.id,
+            metadata=metadata,
+            media_type=media_type,
+        )
+
+    def commit_edit_from_upload(
+        self,
+        original: str | bytes,
+        edited: str | bytes,
+        metadata: dict | None = None,
+        media_type: str | None = None,
+    ) -> tuple[TesCommit, TesCommit]:
+        """
+        Handle an unverified upload: creates an import commit for the original,
+        then an edit commit for the edited version. Returns (import_commit, edit_commit).
+
+        Use this when you know the original has no existing provenance.
+        Use commit_edit() instead if you want automatic detection.
+        """
+        import_commit = self.commit(original, operation="import")
+        edit_commit = self.commit(
+            edited,
+            operation="edit",
+            parent=import_commit.id,
+            metadata=metadata,
+            media_type=media_type,
+        )
+        return (import_commit, edit_commit)
 
     def verify(self, media: str | bytes) -> list[ChainVerificationResult]:
         """Verify provenance for the media (file path or raw bytes); returns verification results per matching commit."""

@@ -2,11 +2,12 @@
 
 import re
 import sys
+import time
 from pathlib import Path
 
 import pytest
 
-from tes_core import Tesera, fingerprint, generate_key_pair, hash_file
+from tes_core import Tesera, fingerprint, generate_key_pair, hash_buffer, hash_file
 
 # Repo root: packages/core/tests -> packages/core -> packages -> root
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
@@ -373,4 +374,180 @@ def test_explicit_key_no_filesystem(tmp_path: Path) -> None:
     t = Tesera(path=str(path), private_key=private_pem)
     assert not (path / "keys").exists()
     assert not (path / "tesera.db").exists()
+    t.close()
+
+
+# --- Edit workflow, lookup, parent parameters ---
+
+
+def test_commit_edit_with_existing_parent(tmp_path: Path) -> None:
+    """commit_edit with existing parent: returns edit commit linked to original."""
+    path = tmp_path / "t"
+    t = Tesera(path=str(path))
+    original_bytes = b"generated image bytes"
+    original_commit = t.commit(original_bytes, operation="create")
+    edited_bytes = b"cropped version"
+    edit_commit = t.commit_edit(original=original_bytes, edited=edited_bytes)
+    assert edit_commit.operation == "edit"
+    assert edit_commit.parent_ids == [original_commit.id]
+    t.close()
+
+
+def test_commit_edit_chain_links_correctly(tmp_path: Path) -> None:
+    """commit_edit then history(edited) contains both edit and original create."""
+    path = tmp_path / "t"
+    t = Tesera(path=str(path))
+    original_bytes = b"original content"
+    t.commit(original_bytes, operation="create")
+    edited_bytes = b"edited content"
+    t.commit_edit(original=original_bytes, edited=edited_bytes)
+    hist = t.history(edited_bytes)
+    operations = [c.operation for c in hist]
+    assert "edit" in operations
+    assert "create" in operations
+    t.close()
+
+
+def test_commit_edit_unverified_upload(tmp_path: Path) -> None:
+    """commit_edit with unverified original: creates import then edit; parent links to import."""
+    path = tmp_path / "t"
+    t = Tesera(path=str(path))
+    original_bytes = b"unknown image data"
+    edited_bytes = b"edited image data"
+    edit_commit = t.commit_edit(original=original_bytes, edited=edited_bytes)
+    assert edit_commit.operation == "edit"
+    import_found = t.lookup(original_bytes)
+    assert import_found is not None
+    assert import_found.operation == "import"
+    assert import_found.id in edit_commit.parent_ids
+    t.close()
+
+
+def test_commit_edit_unverified_creates_import(tmp_path: Path) -> None:
+    """commit_edit unverified: import commit has operation import, empty parent_ids, correct media_hash."""
+    path = tmp_path / "t"
+    t = Tesera(path=str(path))
+    original_bytes = b"unverified upload bytes"
+    t.commit_edit(original=original_bytes, edited=b"edited")
+    import_commit = t.lookup(original_bytes)
+    assert import_commit is not None
+    assert import_commit.operation == "import"
+    assert import_commit.parent_ids == []
+    assert import_commit.media_hash == hash_buffer(original_bytes)
+    t.close()
+
+
+def test_commit_edit_from_upload_returns_both(tmp_path: Path) -> None:
+    """commit_edit_from_upload returns (import_commit, edit_commit); edit parent is import."""
+    path = tmp_path / "t"
+    t = Tesera(path=str(path))
+    result = t.commit_edit_from_upload(
+        original=b"original data", edited=b"edited data"
+    )
+    assert isinstance(result, tuple)
+    assert len(result) == 2
+    import_commit, edit_commit = result
+    assert import_commit.operation == "import"
+    assert edit_commit.operation == "edit"
+    assert edit_commit.parent_ids == [import_commit.id]
+    t.close()
+
+
+def test_commit_edit_from_upload_chain(tmp_path: Path) -> None:
+    """commit_edit_from_upload then history(edited) returns full chain: edit -> import."""
+    path = tmp_path / "t"
+    t = Tesera(path=str(path))
+    original_bytes = b"upload data"
+    edited_bytes = b"edited upload data"
+    t.commit_edit_from_upload(original=original_bytes, edited=edited_bytes)
+    hist = t.history(edited_bytes)
+    operations = [c.operation for c in hist]
+    assert "edit" in operations
+    assert "import" in operations
+    t.close()
+
+
+def test_commit_parent_parameter(tmp_path: Path) -> None:
+    """commit(..., parent=original.id) produces edit with single parent."""
+    path = tmp_path / "t"
+    t = Tesera(path=str(path))
+    original_commit = t.commit(b"original", operation="create")
+    edited_commit = t.commit(
+        b"edited", operation="edit", parent=original_commit.id
+    )
+    assert edited_commit.parent_ids == [original_commit.id]
+    t.close()
+
+
+def test_commit_parents_parameter(tmp_path: Path) -> None:
+    """commit(..., parents=[A.id, B.id]) for derive produces parent_ids containing both."""
+    path = tmp_path / "t"
+    t = Tesera(path=str(path))
+    commit_a = t.commit(b"media a", operation="create")
+    commit_b = t.commit(b"media b", operation="create")
+    derived = t.commit(
+        b"derived", operation="derive", parents=[commit_a.id, commit_b.id]
+    )
+    assert set(derived.parent_ids) == {commit_a.id, commit_b.id}
+    t.close()
+
+
+def test_commit_parent_and_parents_conflict(tmp_path: Path) -> None:
+    """Passing both parent and parents raises ValueError."""
+    path = tmp_path / "t"
+    t = Tesera(path=str(path))
+    with pytest.raises(ValueError, match="Cannot specify both"):
+        t.commit(
+            b"x",
+            operation="edit",
+            parent="a" * 64,
+            parents=["b" * 64],
+        )
+    t.close()
+
+
+def test_lookup_found(tmp_path: Path) -> None:
+    """lookup after commit returns that commit."""
+    path = tmp_path / "t"
+    t = Tesera(path=str(path))
+    committed = t.commit(b"some media", operation="create")
+    found = t.lookup(b"some media")
+    assert found is not None
+    assert found.id == committed.id
+    t.close()
+
+
+def test_lookup_not_found(tmp_path: Path) -> None:
+    """lookup with never-committed bytes returns None."""
+    path = tmp_path / "t"
+    t = Tesera(path=str(path))
+    result = t.lookup(b"never committed")
+    assert result is None
+    t.close()
+
+
+def test_lookup_bytes_and_path(tmp_path: Path) -> None:
+    """Commit by path; lookup with same file bytes returns the commit."""
+    path = tmp_path / "t"
+    t = Tesera(path=str(path))
+    t.commit(str(FIXTURE_PATH), operation="create")
+    fixture_bytes = FIXTURE_PATH.read_bytes()
+    found = t.lookup(fixture_bytes)
+    assert found is not None
+    assert found.media_hash == hash_file(str(FIXTURE_PATH))
+    t.close()
+
+
+def test_lookup_returns_most_recent(tmp_path: Path) -> None:
+    """lookup returns the commit with the latest timestamp when multiple exist."""
+    path = tmp_path / "t"
+    t = Tesera(path=str(path))
+    media = b"same content"
+    first = t.commit(media, operation="create", metadata={"n": 1})
+    time.sleep(1)
+    second = t.commit(media, operation="create", metadata={"n": 2})
+    found = t.lookup(media)
+    assert found is not None
+    assert found.id == second.id
+    assert found.timestamp >= first.timestamp
     t.close()
