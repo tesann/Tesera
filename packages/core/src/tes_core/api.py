@@ -10,7 +10,7 @@ from tes_core.commit import (
     deserialize_commit,
     serialize_commit,
 )
-from tes_core.hash import hash_file
+from tes_core.hash import hash_buffer, hash_file
 from tes_core.sign import fingerprint, generate_key_pair, get_public_key_pem
 from tes_core.store import SqliteCommitStore
 from tes_core.chain import ChainVerificationResult, get_provenance
@@ -23,13 +23,20 @@ class Tesera:
     provenance, and query history. Keys and SQLite store live under the given path.
     """
 
-    def __init__(self, path: str = ".tesera", key_name: str = "default") -> None:
+    def __init__(
+        self,
+        path: str = ".tesera",
+        key_name: str = "default",
+        media_type: str | None = None,
+    ) -> None:
         """Initialize Tesera at the given path with the named signing key.
 
         path: Directory for data (SQLite DB and keys). Created if missing. Default .tesera.
         key_name: Name of the key pair (files keys/{key_name}.pem and .pub.pem). Default default.
+        media_type: Optional default MIME type for commits (overridable per commit).
         """
         self._path = os.path.abspath(path)
+        self._default_media_type = media_type
         keys_dir = os.path.join(self._path, "keys")
         os.makedirs(keys_dir, exist_ok=True)
 
@@ -90,31 +97,40 @@ class Tesera:
 
     def commit(
         self,
-        file_path: str,
+        media: str | bytes,
         operation: str = "create",
         parents: list[str] | None = None,
         metadata: dict | None = None,
+        media_type: str | None = None,
     ) -> TesCommit:
-        """Create a provenance commit for the media file and save it to the store."""
+        """Create a provenance commit for the media (file path or raw bytes) and save it to the store."""
         parent_ids = parents if parents is not None else []
+        resolved_media_type = (
+            media_type if media_type is not None else self._default_media_type
+        )
         commit = create_commit(
-            file_path,
+            media,
             self._private_key_pem,
             operation,
             parent_ids=parent_ids,
             metadata=metadata,
+            media_type=resolved_media_type,
         )
         self._store.save(commit)
         return commit
 
-    def verify(self, file_path: str) -> list[ChainVerificationResult]:
-        """Verify provenance for the file; returns verification results per matching commit."""
-        media_hash = hash_file(file_path)
+    def verify(self, media: str | bytes) -> list[ChainVerificationResult]:
+        """Verify provenance for the media (file path or raw bytes); returns verification results per matching commit."""
+        media_hash = (
+            hash_buffer(media) if isinstance(media, bytes) else hash_file(media)
+        )
         return get_provenance(media_hash, self._store, self._key_resolver)
 
-    def history(self, file_path: str) -> list[TesCommit]:
-        """Return all commits for this file (by hash) plus ancestors, sorted by timestamp ascending."""
-        media_hash = hash_file(file_path)
+    def history(self, media: str | bytes) -> list[TesCommit]:
+        """Return all commits for this media (by hash) plus ancestors, sorted by timestamp ascending."""
+        media_hash = (
+            hash_buffer(media) if isinstance(media, bytes) else hash_file(media)
+        )
         commits = self._store.get_by_media_hash(media_hash)
         if not commits:
             return []

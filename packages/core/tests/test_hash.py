@@ -3,7 +3,14 @@
 import re
 from pathlib import Path
 
-from tes_core import detect_media_type, hash_buffer, hash_file
+import pytest
+
+from tes_core import (
+    detect_media_type,
+    detect_media_type_from_buffer,
+    hash_buffer,
+    hash_file,
+)
 
 # Repo root: packages/core/tests -> packages/core -> packages -> root
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
@@ -48,3 +55,20 @@ def test_detect_media_type_fixture_is_octet_stream() -> None:
     """Fixture is raw bytes; detect_media_type returns application/octet-stream."""
     result = detect_media_type(str(FIXTURE_PATH))
     assert result == "application/octet-stream"
+
+
+def test_detect_media_type_from_buffer_raw_bytes() -> None:
+    """Pass raw bytes; returns application/octet-stream."""
+    result = detect_media_type_from_buffer(b"test media content")
+    assert result == "application/octet-stream"
+
+
+def test_detect_media_type_from_buffer_jpeg() -> None:
+    """Minimal JPEG header; returns image/jpeg when libmagic is available."""
+    try:
+        import magic  # noqa: F401
+    except Exception:
+        pytest.skip("libmagic not installed")
+    minimal_jpeg = b"\xff\xd8\xff\xe0" + b"\x00" * 20
+    result = detect_media_type_from_buffer(minimal_jpeg)
+    assert result == "image/jpeg"

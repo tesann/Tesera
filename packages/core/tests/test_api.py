@@ -185,3 +185,64 @@ def test_multiple_commits_same_file(tmp_path: Path) -> None:
     results = t.verify(str(FIXTURE_PATH))
     assert len(results) == 2
     t.close()
+
+
+def test_commit_bytes(tmp_path: Path) -> None:
+    """Commit raw bytes, then verify with same bytes; one result."""
+    path = tmp_path / "t"
+    t = Tesera(path=str(path))
+    t.commit(b"test media content", operation="create")
+    results = t.verify(b"test media content")
+    assert len(results) == 1
+    t.close()
+
+
+def test_commit_bytes_matches_file(tmp_path: Path) -> None:
+    """Commit fixture by path and by bytes; same media_hash."""
+    path = tmp_path / "t"
+    t = Tesera(path=str(path))
+    by_path = t.commit(str(FIXTURE_PATH), operation="create")
+    fixture_bytes = FIXTURE_PATH.read_bytes()
+    by_bytes = t.commit(fixture_bytes, operation="create")
+    assert by_path.media_hash == by_bytes.media_hash
+    t.close()
+
+
+def test_commit_default_media_type(tmp_path: Path) -> None:
+    """Init with media_type; commit bytes uses that type."""
+    path = tmp_path / "t"
+    t = Tesera(path=str(path), media_type="image/png")
+    commit = t.commit(b"test media content", operation="create")
+    assert commit.media_type == "image/png"
+    t.close()
+
+
+def test_commit_override_media_type(tmp_path: Path) -> None:
+    """Init default media_type overridden by per-commit media_type."""
+    path = tmp_path / "t"
+    t = Tesera(path=str(path), media_type="image/png")
+    commit = t.commit(b"test media content", operation="create", media_type="image/jpeg")
+    assert commit.media_type == "image/jpeg"
+    t.close()
+
+
+def test_verify_bytes(tmp_path: Path) -> None:
+    """Commit file by path, verify with raw bytes of same file."""
+    path = tmp_path / "t"
+    t = Tesera(path=str(path))
+    t.commit(str(FIXTURE_PATH), operation="create")
+    fixture_bytes = FIXTURE_PATH.read_bytes()
+    results = t.verify(fixture_bytes)
+    assert len(results) == 1
+    t.close()
+
+
+def test_history_bytes(tmp_path: Path) -> None:
+    """Commit file by path, then history with raw bytes returns commits."""
+    path = tmp_path / "t"
+    t = Tesera(path=str(path))
+    t.commit(str(FIXTURE_PATH), operation="create")
+    fixture_bytes = FIXTURE_PATH.read_bytes()
+    hist = t.history(fixture_bytes)
+    assert len(hist) >= 1
+    t.close()

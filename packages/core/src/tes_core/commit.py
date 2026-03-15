@@ -5,7 +5,12 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from tes_core.hash import detect_media_type, hash_buffer, hash_file
+from tes_core.hash import (
+    detect_media_type,
+    detect_media_type_from_buffer,
+    hash_buffer,
+    hash_file,
+)
 from tes_core.sign import fingerprint, get_public_key_pem, sign, verify
 
 VALID_OPERATIONS = ("create", "edit", "derive", "import")
@@ -62,20 +67,26 @@ def canonicalize(obj: dict) -> str:
 
 
 def create_commit(
-    media_path: str,
+    media: str | bytes,
     private_key_pem: str,
     operation: str,
     parent_ids: list[str] | None = None,
     metadata: dict | None = None,
     signer_name: str | None = None,
     signer_uri: str | None = None,
+    media_type: str | None = None,
 ) -> TesCommit:
-    """Create a signed TesCommit for the media file.
+    """Create a signed TesCommit for the media file or raw bytes.
 
-    Hashes the file, builds the commit body, signs it, then derives the commit ID
+    Hashes the media, builds the commit body, signs it, then derives the commit ID
     (Spec Sections 3.4 and 4). Returns a fully populated TesCommit.
     Validates inputs per Specification Section 7; raises ValueError on failure.
     """
+    if type(media) not in (str, bytes):
+        raise TypeError(
+            "media must be a file path (str) or raw bytes (bytes)"
+        )
+
     sorted_parent_ids = sorted(parent_ids) if parent_ids else []
 
     if operation not in VALID_OPERATIONS:
@@ -100,8 +111,18 @@ def create_commit(
                 f"parent_ids[{i}] must be 64 lowercase hex characters; got {pid!r}"
             )
 
-    media_hash = hash_file(media_path)
-    media_type = detect_media_type(media_path)
+    if isinstance(media, bytes):
+        media_hash = hash_buffer(media)
+        resolved_media_type = (
+            media_type
+            if media_type is not None
+            else detect_media_type_from_buffer(media)
+        )
+    else:
+        media_hash = hash_file(media)
+        resolved_media_type = (
+            media_type if media_type is not None else detect_media_type(media)
+        )
     public_key_pem = get_public_key_pem(private_key_pem)
     key_id = fingerprint(public_key_pem)
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -114,7 +135,7 @@ def create_commit(
 
     body: dict = {
         "media_hash": media_hash,
-        "media_type": media_type,
+        "media_type": resolved_media_type,
         "operation": operation,
         "parent_ids": sorted_parent_ids,
         "timestamp": timestamp,
@@ -137,7 +158,7 @@ def create_commit(
         id=commit_id,
         version=1,
         media_hash=media_hash,
-        media_type=media_type,
+        media_type=resolved_media_type,
         parent_ids=sorted_parent_ids,
         operation=operation,
         timestamp=timestamp,

@@ -39,3 +39,18 @@ def detect_media_type(path: str) -> str:
         return (mime or "application/octet-stream").strip()
     except Exception:
         return "application/octet-stream"
+
+
+def detect_media_type_from_buffer(data: bytes) -> str:
+    """Detect MIME type from raw bytes (magic bytes).
+
+    Returns the detected MIME type (e.g. image/jpeg), or application/octet-stream
+    if detection fails or libmagic is not installed.
+    """
+    try:
+        import magic
+
+        mime = magic.from_buffer(data, mime=True)
+        return (mime or "application/octet-stream").strip()
+    except Exception:
+        return "application/octet-stream"

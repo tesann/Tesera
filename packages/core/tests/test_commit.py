@@ -4,6 +4,8 @@ import re
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from tes_core import (
     TesCommit,
     canonicalize,
@@ -191,4 +193,36 @@ def test_metadata_omitted_when_none() -> None:
     commit = create_commit(str(FIXTURE_PATH), private_pem, "create")
     json_str = serialize_commit(commit)
     assert "metadata" not in json_str
+
+
+def test_create_commit_from_bytes() -> None:
+    """Create commit from raw bytes; media_hash equals Test Vector 1."""
+    _, private_pem = generate_key_pair()
+    commit = create_commit(b"test media content", private_pem, "create")
+    assert commit.media_hash == TEST_VECTOR_1_HASH
+
+
+def test_create_commit_bytes_matches_file() -> None:
+    """Commit from file path and from same bytes yield the same media_hash."""
+    _, private_pem = generate_key_pair()
+    fixture_bytes = FIXTURE_PATH.read_bytes()
+    commit_from_path = create_commit(str(FIXTURE_PATH), private_pem, "create")
+    commit_from_bytes = create_commit(fixture_bytes, private_pem, "create")
+    assert commit_from_path.media_hash == commit_from_bytes.media_hash
+
+
+def test_create_commit_explicit_media_type() -> None:
+    """Commit from bytes with explicit media_type; commit.media_type is that value."""
+    _, private_pem = generate_key_pair()
+    commit = create_commit(
+        b"test media content", private_pem, "create", media_type="image/png"
+    )
+    assert commit.media_type == "image/png"
+
+
+def test_create_commit_rejects_wrong_input_type() -> None:
+    """Passing non-str, non-bytes as media raises TypeError."""
+    _, private_pem = generate_key_pair()
+    with pytest.raises(TypeError, match="media must be a file path \\(str\\) or raw bytes \\(bytes\\)"):
+        create_commit(123, private_pem, "create")
 

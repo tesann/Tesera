@@ -9,7 +9,12 @@ from tes_core.commit import (
     serialize_commit,
     verify_commit,
 )
-from tes_core.hash import detect_media_type, hash_buffer, hash_file
+from tes_core.hash import (
+    detect_media_type,
+    detect_media_type_from_buffer,
+    hash_buffer,
+    hash_file,
+)
 from tes_core.sign import fingerprint, generate_key_pair, get_public_key_pem, sign, verify
 from tes_core.store import CommitStore, InMemoryCommitStore, SqliteCommitStore
 from tes_core.chain import (
@@ -29,6 +34,7 @@ __all__ = [
     "deserialize_commit",
     "canonicalize",
     "detect_media_type",
+    "detect_media_type_from_buffer",
     "fingerprint",
     "generate_key_pair",
     "get_public_key_pem",
