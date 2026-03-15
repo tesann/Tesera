@@ -1,9 +1,13 @@
 [project]
 name = "tesera"
 version = "0.1.0"
-description = "Tesera — cryptographic provenance for digital media"
-requires-python = ">=3.11"
+description = "Open-source SDK for cryptographic media provenance"
+requires-python = ">=3.10"
 dependencies = []
+license = "Apache-2.0"
+
+[project.urls]
+Repository = "https://github.com/tesann/Tesera"
 
 [project.optional-dependencies]
 dev = [
